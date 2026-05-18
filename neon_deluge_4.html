@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neon Deluge — Generative Art</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&family=Lora:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --anthropic-dark: #141413;
+            --anthropic-light: #faf9f5;
+            --anthropic-mid-gray: #b0aea5;
+            --anthropic-light-gray: #e8e6dc;
+            --anthropic-orange: #d97757;
+            --anthropic-blue: #6a9bcc;
+            --anthropic-green: #788c5d;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: linear-gradient(135deg, var(--anthropic-light) 0%, #f5f3ee 100%);
+            min-height: 100vh;
+            color: var(--anthropic-dark);
+        }
+        .container { display: flex; min-height: 100vh; padding: 20px; gap: 20px; }
+        .sidebar {
+            width: 300px; flex-shrink: 0;
+            background: rgba(255,255,255,0.95);
+            backdrop-filter: blur(10px);
+            padding: 24px; border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(20,20,19,0.1);
+            overflow-y: auto; overflow-x: hidden;
+        }
+        .sidebar h1 { font-family: 'Lora', serif; font-size: 22px; font-weight: 500; color: var(--anthropic-dark); margin-bottom: 6px; }
+        .sidebar .subtitle { color: var(--anthropic-mid-gray); font-size: 12px; margin-bottom: 28px; line-height: 1.5; }
+        .control-section { margin-bottom: 28px; }
+        .control-section h3 { font-size: 14px; font-weight: 600; color: var(--anthropic-dark); margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+        .control-section h3::before { content: '•'; color: var(--anthropic-orange); font-weight: bold; }
+        .seed-input {
+            width: 100%; background: var(--anthropic-light); padding: 10px; border-radius: 8px;
+            font-family: 'Courier New', monospace; font-size: 13px; margin-bottom: 10px;
+            border: 1px solid var(--anthropic-light-gray); text-align: center;
+        }
+        .seed-input:focus { outline: none; border-color: var(--anthropic-orange); background: white; }
+        .seed-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+        .control-group { margin-bottom: 16px; }
+        .control-group label { display: block; font-size: 13px; font-weight: 500; color: var(--anthropic-dark); margin-bottom: 6px; }
+        .slider-container { display: flex; align-items: center; gap: 10px; }
+        .slider-container input[type="range"] { flex: 1; height: 4px; background: var(--anthropic-light-gray); border-radius: 2px; outline: none; -webkit-appearance: none; }
+        .slider-container input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; background: var(--anthropic-orange); border-radius: 50%; cursor: pointer; transition: all 0.2s; }
+        .slider-container input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.15); }
+        .value-display { font-family: 'Courier New', monospace; font-size: 11px; color: var(--anthropic-mid-gray); min-width: 44px; text-align: right; }
+        .color-group { margin-bottom: 12px; }
+        .color-group label { display: block; font-size: 12px; color: var(--anthropic-mid-gray); margin-bottom: 4px; }
+        .color-picker-container { display: flex; align-items: center; gap: 8px; }
+        .color-picker-container input[type="color"] { width: 30px; height: 30px; border: none; border-radius: 6px; cursor: pointer; background: none; padding: 0; }
+        .color-value { font-family: 'Courier New', monospace; font-size: 11px; color: var(--anthropic-mid-gray); }
+        button {
+            width: 100%; padding: 10px 14px; border: none; border-radius: 8px; cursor: pointer;
+            font-family: 'Poppins', sans-serif; font-size: 13px; font-weight: 500; transition: all 0.2s;
+        }
+        .btn-primary { background: var(--anthropic-orange); color: white; }
+        .btn-primary:hover { background: #c86641; transform: translateY(-1px); }
+        .btn-secondary { background: var(--anthropic-light-gray); color: var(--anthropic-dark); }
+        .btn-secondary:hover { background: #d8d6cc; }
+        .button-row { display: flex; flex-direction: column; gap: 8px; }
+        .canvas-area { flex: 1; display: flex; align-items: center; justify-content: center; }
+        #canvas-container canvas { border-radius: 8px; box-shadow: 0 20px 60px rgba(20,20,19,0.25); display: block; }
+        .loading { color: var(--anthropic-mid-gray); font-size: 14px; padding: 40px; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <!-- SIDEBAR -->
+    <div class="sidebar">
+        <h1>Neon Deluge</h1>
+        <p class="subtitle">Cyberpunk rain cascade — data as weather, neon as signal, city as ghost.</p>
+
+        <!-- SEED -->
+        <div class="control-section">
+            <h3>Seed</h3>
+            <input type="text" class="seed-input" id="seed-input" value="42069" onchange="updateSeed()">
+            <div class="seed-controls">
+                <button class="btn-secondary" onclick="previousSeed()">← Prev</button>
+                <button class="btn-secondary" onclick="nextSeed()">Next →</button>
+            </div>
+            <button class="btn-secondary" onclick="randomSeedAndUpdate()">Random Seed</button>
+        </div>
+
+        <!-- PARAMETERS -->
+        <div class="control-section">
+            <h3>Parameters</h3>
+
+            <div class="control-group">
+                <label>Rain Intensity</label>
+                <div class="slider-container">
+                    <input type="range" id="rainCount" min="80" max="400" step="10" value="180" oninput="updateParam('rainCount', parseInt(this.value))">
+                    <span class="value-display" id="rainCount-value">180</span>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label>Scroll Speed</label>
+                <div class="slider-container">
+                    <input type="range" id="scrollSpeed" min="0" max="5" step="0.1" value="1.2" oninput="updateParam('scrollSpeed', parseFloat(this.value))">
+                    <span class="value-display" id="scrollSpeed-value">1.2</span>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label>Fall Speed</label>
+                <div class="slider-container">
+                    <input type="range" id="rainSpeed" min="5" max="30" step="1" value="14" oninput="updateParam('rainSpeed', parseFloat(this.value))">
+                    <span class="value-display" id="rainSpeed-value">14</span>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label>Streak Length</label>
+                <div class="slider-container">
+                    <input type="range" id="streakLen" min="20" max="120" step="5" value="55" oninput="updateParam('streakLen', parseInt(this.value))">
+                    <span class="value-display" id="streakLen-value">55</span>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label>Wind Drift</label>
+                <div class="slider-container">
+                    <input type="range" id="windDrift" min="0" max="3" step="0.1" value="0.8" oninput="updateParam('windDrift', parseFloat(this.value))">
+                    <span class="value-display" id="windDrift-value">0.8</span>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label>Neon Glow</label>
+                <div class="slider-container">
+                    <input type="range" id="glowIntensity" min="0" max="1" step="0.05" value="0.85" oninput="updateParam('glowIntensity', parseFloat(this.value))">
+                    <span class="value-display" id="glowIntensity-value">0.85</span>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label>Building Density</label>
+                <div class="slider-container">
+                    <input type="range" id="buildingCount" min="6" max="22" step="1" value="13" oninput="updateParam('buildingCount', parseInt(this.value))">
+                    <span class="value-display" id="buildingCount-value">13</span>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label>Data Glitch</label>
+                <div class="slider-container">
+                    <input type="range" id="glitchFreq" min="0" max="1" step="0.05" value="0.3" oninput="updateParam('glitchFreq', parseFloat(this.value))">
+                    <span class="value-display" id="glitchFreq-value">0.3</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- COLORS -->
+        <div class="control-section">
+            <h3>Neon Palette</h3>
+            <div class="color-group">
+                <label>Primary Neon</label>
+                <div class="color-picker-container">
+                    <input type="color" id="neon1" value="#00ffff" onchange="updateNeonColor(0, this.value)">
+                    <span class="color-value" id="neon1-value">#00ffff</span>
+                </div>
+            </div>
+            <div class="color-group">
+                <label>Secondary Neon</label>
+                <div class="color-picker-container">
+                    <input type="color" id="neon2" value="#ff2d78" onchange="updateNeonColor(1, this.value)">
+                    <span class="color-value" id="neon2-value">#ff2d78</span>
+                </div>
+            </div>
+            <div class="color-group">
+                <label>Accent Neon</label>
+                <div class="color-picker-container">
+                    <input type="color" id="neon3" value="#ffb700" onchange="updateNeonColor(2, this.value)">
+                    <span class="color-value" id="neon3-value">#ffb700</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- ACTIONS -->
+        <div class="control-section">
+            <h3>Actions</h3>
+            <div class="button-row">
+                <button class="btn-primary" onclick="initializeSystem()">Regenerate</button>
+                <button class="btn-secondary" onclick="resetParameters()">Reset Defaults</button>
+                <button class="btn-secondary" onclick="downloadPNG()">Download PNG</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- CANVAS -->
+    <div class="canvas-area">
+        <div id="canvas-container">
+            <div class="loading">Initializing neon deluge...</div>
+        </div>
+    </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+// NEON DELUGE — Cyberpunk Anime Rain Generator (Parallax 3D)
+// ═══════════════════════════════════════════════════════
+
+let params = {
+    seed: 42069,
+    rainCount: 180,
+    rainSpeed: 14,
+    streakLen: 55,
+    windDrift: 0.8,
+    glowIntensity: 0.85,
+    buildingCount: 13,
+    glitchFreq: 0.3,
+    scrollSpeed: 1.2,
+    neonColors: ['#00ffff', '#ff2d78', '#ffb700']
+};
+let defaultParams = JSON.parse(JSON.stringify(params));
+
+// System state
+let drops = [];          // [far, mid, near] layer arrays
+let layers = [];         // building depth layers
+let glitchChars = [];
+let frameCount2 = 0;
+let scrollOffset = 0;    // master scroll position (pixels, increases each frame)
+
+// Parallax speed multipliers per layer — near scrolls fastest
+const PARALLAX_SPEED  = [0.35, 0.65, 1.0];
+const LAYER_ALPHA     = [0.55, 0.80, 1.0];
+const LAYER_SCALE     = [0.60, 0.80, 1.0];   // height scale
+const RAIN_LAYERS     = 3;
+
+// 3D side-face depth for each layer
+const SIDE_DEPTH      = [6, 12, 20];
+
+const GLITCH_CHARS = ['ア','イ','ウ','エ','オ','カ','キ','ク','ケ','コ','サ','シ','ス','セ','ソ',
+    'タ','チ','ツ','テ','ト','ナ','ニ','ヌ','ネ','ノ','ハ','ヒ','フ','ヘ','ホ',
+    '0','1','2','3','4','5','6','7','8','9','#','$','%','@','!','*','&','^',
+    'マ','ミ','ム','メ','モ','ヤ','ユ','ヨ','ラ','リ','ル','レ','ロ','ワ','ヲ','ン'];
+
+// ─── UTILITIES ───────────────────────────────────────────
+
+function hexToRgb(hex) {
+    hex = hex.replace('#', '');
+    return {
+        r: parseInt(hex.substring(0,2), 16),
+        g: parseInt(hex.substring(2,4), 16),
+        b: parseInt(hex.substring(4,6), 16)
+    };
+}
+
+// ─── SETUP ───────────────────────────────────────────────
+
+function setup() {
+    let cnv = createCanvas(900, 900);
+    cnv.parent('canvas-container');
+    document.querySelector('.loading').style.display = 'none';
+    initializeSystem();
+}
+
+function initializeSystem() {
+    randomSeed(params.seed);
+    noiseSeed(params.seed);
+    frameCount2 = 0;
+    scrollOffset = 0;
+    buildAllLayers();
+    spawnAllRain();
+    glitchChars = [];
+    background(0);
+}
+
+// ─── BUILDING GENERATION ─────────────────────────────────
+
+function buildAllLayers() {
+    layers = [];
+    // Far layer: more buildings, shorter, dimmer
+    layers.push(buildLayer(0, floor(params.buildingCount * 1.4), 0.28, 0.52));
+    // Mid layer
+    layers.push(buildLayer(1, params.buildingCount, 0.35, 0.68));
+    // Near layer: fewer, tallest, most detailed
+    layers.push(buildLayer(2, floor(params.buildingCount * 0.6), 0.42, 0.78));
+}
+
+function buildLayer(layerIdx, count, minHFrac, maxHFrac) {
+    let buildings = [];
+    // Tile across 3x canvas width — scroll wraps within this span
+    let totalW = width * 3;
+    let segW = totalW / count;
+    let baseX = 0;
+
+    for (let i = 0; i < count; i++) {
+        let bx = baseX + i * segW + randomGaussian(0, segW * 0.1);
+        let bw = segW * (0.55 + random(0.38));
+        let bh = random(height * minHFrac, height * maxHFrac) * LAYER_SCALE[layerIdx];
+        let by = height - bh;
+
+        // Rooftop shape: flat | stepped | tapered | antenna
+        let roofType = floor(random(4));
+        let setbacks = [];
+        if (roofType === 1) { // stepped
+            let steps = floor(random(1, 4));
+            for (let s = 0; s < steps; s++) {
+                setbacks.push({
+                    inset: random(6, 20) * (s + 1),
+                    height: random(18, 50)
+                });
+            }
+        }
+        let hasAntenna = random() < 0.5;
+        let hasWaterTower = random() < 0.25 && layerIdx === 2;
+        let hasBillboard = random() < 0.35 && layerIdx >= 1;
+
+        // Window grid — sized to layer
+        let wSize = layerIdx === 0 ? 8 : layerIdx === 1 ? 11 : 15;
+        let wGap = layerIdx === 0 ? 12 : layerIdx === 1 ? 16 : 20;
+        let windowCols = max(1, floor(bw / wGap));
+        let windowRows = max(1, floor(bh * 0.75 / wGap));
+        let windows = [];
+        for (let wr = 0; wr < windowRows; wr++) {
+            for (let wc = 0; wc < windowCols; wc++) {
+                windows.push({
+                    lit: random() < (0.35 + layerIdx * 0.1),
+                    flickerPhase: random(TWO_PI),
+                    flickerSpeed: random(0.003, 0.04),
+                    color: floor(random(params.neonColors.length)),
+                    wSize: wSize
+                });
+            }
+        }
+
+        let signColor = floor(random(params.neonColors.length));
+        let sideColor = floor(random(params.neonColors.length));
+        let depth = SIDE_DEPTH[layerIdx];
+
+        buildings.push({
+            x: bx, y: by, w: bw, h: bh,
+            layerIdx,
+            roofType, setbacks,
+            hasAntenna, hasWaterTower, hasBillboard,
+            windowCols, windowRows, windows, wGap,
+            signColor, sideColor, depth
+        });
+    }
+    return buildings;
+}
+
+// ─── RAIN ────────────────────────────────────────────────
+
+function spawnAllRain() {
+    drops = [[], [], []];
+    let counts = [
+        floor(params.rainCount * 0.4),
+        floor(params.rainCount * 0.4),
+        floor(params.rainCount * 0.2)
+    ];
+    for (let li = 0; li < RAIN_LAYERS; li++) {
+        for (let i = 0; i < counts[li]; i++) {
+            drops[li].push(newDrop(li, true));
+        }
+    }
+}
+
+function newDrop(li, randomY) {
+    let colorIdx = floor(random(params.neonColors.length));
+    let rgb = hexToRgb(params.neonColors[colorIdx]);
+    let scale = 0.4 + li * 0.3;
+    let spd = random(params.rainSpeed * 0.5, params.rainSpeed * 1.5) * scale;
+    let len = random(params.streakLen * 0.7, params.streakLen * 1.6) * scale;
+    let a = (li === 0) ? random(80, 160) : (li === 1) ? random(160, 220) : random(200, 255);
+    return {
+        x: random(width),
+        y: randomY ? random(-height, 0) : random(-300, -10),
+        vx: random(-params.windDrift, params.windDrift) * scale,
+        vy: spd,
+        len, r: rgb.r, g: rgb.g, b: rgb.b,
+        alpha: a,
+        w: random(0.6, 1.2 + li),
+        noiseOff: random(1000),
+        li
+    };
+}
+
+// ─── DRAW: BACKGROUND ────────────────────────────────────
+
+function drawBackground() {
+    let nColors = params.neonColors.map(hexToRgb);
+
+    // Sky gradient — deep navy to indigo, neon horizon bleed
+    for (let y = 0; y < height; y++) {
+        let t = y / height;
+        let r = lerp(4, 20, t);
+        let g = lerp(2, 8, t);
+        let b = lerp(28, 42, t);
+        let c0 = nColors[0], c1 = nColors[1];
+        let hb = Math.pow(t, 1.4);
+        r += c0.r * hb * 0.22 + c1.r * hb * 0.12;
+        g += c0.g * hb * 0.22 + c1.g * hb * 0.12;
+        b += c0.b * hb * 0.22 + c1.b * hb * 0.12;
+        stroke(r, g, b);
+        line(0, y, width, y);
+    }
+
+    // Distant mountain silhouettes — scroll at 0.15x speed, loop every 2x canvas
+    let mScroll = (scrollOffset * 0.15) % (width * 2);
+    noStroke();
+    fill(14, 10, 28, 200);
+    beginShape();
+    vertex(0, height);
+    for (let x = -20; x <= width + 20; x += 16) {
+        let nx = noise((x + mScroll) * 0.003, 99);
+        let ny = height * 0.52 - nx * height * 0.22;
+        vertex(x, ny);
+    }
+    vertex(width, height);
+    endShape(CLOSE);
+
+    // Second mountain ridge — scroll at 0.22x
+    let mScroll2 = (scrollOffset * 0.22) % (width * 2);
+    fill(18, 13, 38, 160);
+    beginShape();
+    vertex(0, height);
+    for (let x = -20; x <= width + 20; x += 12) {
+        let nx = noise((x + mScroll2) * 0.004, 199);
+        let ny = height * 0.60 - nx * height * 0.14;
+        vertex(x, ny);
+    }
+    vertex(width, height);
+    endShape(CLOSE);
+
+    // Bloom halos — fixed positions, no mouse tracking
+    for (let i = 0; i < nColors.length; i++) {
+        let c = nColors[i];
+        let bx = width * (0.18 + i * 0.32);
+        let by = height * 0.76;
+        for (let r2 = 240; r2 > 0; r2 -= 8) {
+            fill(c.r, c.g, c.b, map(r2, 0, 240, 0, 36 * params.glowIntensity));
+            ellipse(bx, by, r2 * 3.2, r2 * 1.2);
+        }
+    }
+
+    // Fog band at mid-height
+    for (let nc of nColors) {
+        fill(nc.r, nc.g, nc.b, 5 * params.glowIntensity);
+        rect(0, height * 0.5, width, height * 0.5);
+    }
+}
+
+// ─── DRAW: SINGLE BUILDING (3D) ──────────────────────────
+
+function drawBuilding(b, offsetX, t, nColors, layerIdx) {
+    let x = b.x + offsetX;
+    let y = b.y;
+    let w = b.w;
+    let h = b.h;
+    let d = b.depth; // side-face depth (isometric right face)
+    let sc = nColors[b.signColor % nColors.length];
+    let sideC = nColors[b.sideColor % nColors.length];
+    let la = LAYER_ALPHA[layerIdx];
+
+    // ── Neon halo behind building ──
+    noStroke();
+    for (let gl = 4; gl >= 1; gl--) {
+        fill(sc.r, sc.g, sc.b, (7 * params.glowIntensity * la) / gl);
+        rect(x - gl*5, y - gl*3, w + gl*10 + d, h + gl*6);
+    }
+
+    // ── RIGHT SIDE FACE (3D illusion) ──
+    // Darker tinted face on the right — gives 3D depth
+    let sideShade = 0.28 + layerIdx * 0.08;
+    fill(
+        sideC.r * sideShade + 6,
+        sideC.g * sideShade + 4,
+        sideC.b * sideShade + 18,
+        230 * la
+    );
+    noStroke();
+    beginShape();
+    vertex(x + w,     y);
+    vertex(x + w + d, y - d * 0.5);
+    vertex(x + w + d, y + h - d * 0.5);
+    vertex(x + w,     y + h);
+    endShape(CLOSE);
+
+    // ── FRONT FACE ──
+    fill(8, 10, 24, 242 * la);
+    rect(x, y, w, h);
+
+    // Vertical panel lines on front
+    stroke(sc.r, sc.g, sc.b, 14 * la);
+    strokeWeight(1);
+    let panels = max(1, floor(w / 24));
+    for (let p = 1; p < panels; p++) {
+        let px2 = x + p * (w / panels);
+        line(px2, y, px2, y + h);
+    }
+
+    // Horizontal floor lines (subtle)
+    stroke(sc.r, sc.g, sc.b, 7 * la);
+    let floors = max(1, floor(h / 28));
+    for (let f = 1; f < floors; f++) {
+        let fy = y + f * (h / floors);
+        line(x, fy, x + w, fy);
+    }
+
+    // ── WINDOWS ──
+    let wW = w / (b.windowCols + 1);
+    let wH = h / (b.windowRows + 1);
+    for (let wr = 0; wr < b.windowRows; wr++) {
+        for (let wc = 0; wc < b.windowCols; wc++) {
+            let wi = wr * b.windowCols + wc;
+            let win = b.windows[wi];
+            if (!win) continue;
+            let wx = x + (wc + 0.5) * wW;
+            let wy = y + h * 0.08 + (wr + 0.5) * (h * 0.84 / (b.windowRows + 1));
+            let flicker = noise(win.flickerPhase + t * win.flickerSpeed * 10) > 0.32;
+            let ws = win.wSize;
+            if (win.lit && flicker) {
+                let wc2 = nColors[win.color % nColors.length];
+                noStroke();
+                for (let gl = 3; gl >= 1; gl--) {
+                    fill(wc2.r, wc2.g, wc2.b, (52 * params.glowIntensity * la) / gl);
+                    rect(wx - ws*0.5 - gl*3, wy - ws*0.35 - gl*2, ws + gl*6, ws*0.7 + gl*4);
+                }
+                fill(wc2.r, wc2.g, wc2.b, 220 * la);
+                rect(wx - ws*0.5, wy - ws*0.35, ws, ws * 0.7);
+                fill(255, 255, 255, 150 * la);
+                rect(wx - ws*0.25, wy - ws*0.18, ws*0.5, ws * 0.35);
+            } else {
+                // Unlit window — dark glass
+                fill(15, 20, 35, 180 * la);
+                noStroke();
+                rect(wx - ws*0.5, wy - ws*0.35, ws, ws * 0.7);
+            }
+        }
+    }
+
+    // ── STEPPED ROOFTOP ──
+    if (b.roofType === 1 && b.setbacks.length > 0) {
+        let curX = x, curY = y, curW = w;
+        for (let s of b.setbacks) {
+            let nx2 = curX + s.inset;
+            let nw = curW - s.inset * 2;
+            if (nw < 8) break;
+            let ny2 = curY - s.height;
+            // Step side face
+            fill(sideC.r * 0.22 + 4, sideC.g * 0.22 + 3, sideC.b * 0.22 + 16, 220 * la);
+            noStroke();
+            beginShape();
+            vertex(nx2 + nw,     ny2);
+            vertex(nx2 + nw + d * 0.7, ny2 - d * 0.35);
+            vertex(nx2 + nw + d * 0.7, curY - d * 0.35);
+            vertex(nx2 + nw,     curY);
+            endShape(CLOSE);
+            // Step front
+            fill(10, 12, 26, 240 * la);
+            rect(nx2, ny2, nw, s.height);
+            // Top edge neon rim
+            stroke(sc.r, sc.g, sc.b, 90 * la * params.glowIntensity);
+            strokeWeight(1.5);
+            line(nx2, ny2, nx2 + nw, ny2);
+            curX = nx2; curY = ny2; curW = nw;
+        }
+    }
+
+    // ── ROOFTOP NEON EDGE ──
+    noFill();
+    stroke(sc.r, sc.g, sc.b, 120 * la * params.glowIntensity);
+    strokeWeight(2);
+    line(x, y, x + w, y);
+    // Softer glow echo
+    stroke(sc.r, sc.g, sc.b, 40 * la * params.glowIntensity);
+    strokeWeight(8);
+    line(x, y, x + w, y);
+
+    // ── ANTENNA ──
+    if (b.hasAntenna) {
+        let ax = x + w * random(0.3, 0.7);
+        let aBot = y;
+        let aH = random(24, 65) * LAYER_SCALE[layerIdx];
+        let aTop = aBot - aH;
+        // Slim tower
+        stroke(180, 190, 210, 200 * la);
+        strokeWeight(1.5);
+        line(ax, aBot, ax, aTop);
+        // Blinking red light
+        let blink = sin(t * 4 + b.x) > 0.5;
+        if (blink) {
+            noStroke();
+            fill(255, 80, 80, 240 * la);
+            ellipse(ax, aTop, 4, 4);
+            fill(255, 80, 80, 80 * la * params.glowIntensity);
+            ellipse(ax, aTop, 14, 14);
+        }
+    }
+
+    // ── WATER TOWER ──
+    if (b.hasWaterTower) {
+        let wx2 = x + w * 0.65;
+        let wy2 = y - 28;
+        noStroke();
+        fill(30, 35, 50, 230 * la);
+        ellipse(wx2, wy2, 22, 14);
+        fill(22, 26, 40, 240 * la);
+        rect(wx2 - 11, wy2, 22, 20);
+        // Legs
+        stroke(60, 70, 90, 180 * la);
+        strokeWeight(1.5);
+        line(wx2 - 8, wy2 + 20, wx2 - 12, y);
+        line(wx2 + 8, wy2 + 20, wx2 + 12, y);
+        line(wx2, wy2 + 20, wx2, y);
+    }
+
+    // ── BILLBOARD / NEON SIGN ──
+    if (b.hasBillboard) {
+        let sc2 = nColors[b.signColor % nColors.length];
+        let signFlicker = sin(t * 3.7 + b.x * 0.01) > -0.75;
+        if (signFlicker) {
+            noFill();
+            let sw = w * 0.72;
+            let sx2 = x + w * 0.14;
+            let sy2 = y - 12;
+            for (let gl = 5; gl >= 1; gl--) {
+                stroke(sc2.r, sc2.g, sc2.b, (75 * params.glowIntensity * la) / gl);
+                strokeWeight(gl * 5);
+                line(sx2, sy2, sx2 + sw, sy2);
+            }
+            stroke(sc2.r, sc2.g, sc2.b, 255 * la);
+            strokeWeight(2);
+            line(sx2, sy2, sx2 + sw, sy2);
+            stroke(255, 255, 255, 190 * la);
+            strokeWeight(1);
+            line(sx2, sy2, sx2 + sw, sy2);
+        }
+    }
+}
+
+// ─── DRAW: ALL BUILDINGS PER LAYER ───────────────────────
+
+function drawLayer(li) {
+    let t = frameCount2 * 0.01;
+    let nColors = params.neonColors.map(hexToRgb);
+    // Each layer scrolls at a different speed; wrap within 3x canvas width
+    let layerScroll = (scrollOffset * PARALLAX_SPEED[li]) % (width * 3);
+    let offsetX = -layerScroll;
+
+    for (let b of layers[li]) {
+        // Draw building at base position shifted by scroll
+        let drawX = b.x + offsetX;
+        // Wrap: if building has gone off the left, shift it right by 3x canvas
+        while (drawX + b.w + b.depth < 0) drawX += width * 3;
+        while (drawX > width + 20) drawX -= width * 3;
+
+        // Only draw if on screen
+        if (drawX + b.w + b.depth >= -20 && drawX <= width + 20) {
+            drawBuilding({ ...b, x: drawX }, 0, t, nColors, li);
+        }
+    }
+}
+
+// ─── DRAW: RAIN LAYER ────────────────────────────────────
+
+function drawRainLayer(li) {
+    let nColors = params.neonColors.map(hexToRgb);
+    let la = LAYER_ALPHA[li];
+
+    for (let d of drops[li]) {
+        let noiseVal = noise(d.noiseOff + frameCount2 * 0.003);
+        d.x += d.vx + map(noiseVal, 0, 1, -0.35, 0.35);
+        d.y += d.vy;
+
+        let rx = d.x;
+        let x1 = rx;
+        let y1 = d.y;
+        let x2 = rx - d.vx * (d.len / d.vy);
+        let y2 = d.y - d.len;
+
+        // Outer bloom
+        for (let gl = 3; gl >= 1; gl--) {
+            strokeWeight(d.w + gl * 3.5);
+            stroke(d.r, d.g, d.b, (d.alpha * 0.1 * params.glowIntensity * la) / gl);
+            line(x1, y1, x2, y2);
+        }
+        // Mid glow
+        strokeWeight(d.w + 1.5);
+        stroke(d.r, d.g, d.b, d.alpha * 0.3 * params.glowIntensity * la);
+        line(x1, y1, x2, y2);
+        // Core
+        strokeWeight(d.w);
+        stroke(d.r, d.g, d.b, d.alpha * la);
+        line(x1, y1, x2, y2);
+        // White hot tip
+        strokeWeight(d.w * 0.5);
+        stroke(255, 255, 255, d.alpha * 0.65 * la);
+        line(x1, y1, x1, y1 - 5);
+
+        // Head
+        noStroke();
+        for (let gl = 2; gl >= 1; gl--) {
+            fill(d.r, d.g, d.b, (d.alpha * 0.45 * params.glowIntensity * la) / gl);
+            ellipse(x1, y1, d.w * gl * 3.5, d.w * gl * 3.5);
+        }
+        fill(d.r, d.g, d.b, d.alpha * la);
+        ellipse(x1, y1, d.w * 2.5, d.w * 2.5);
+        fill(255, 255, 255, d.alpha * 0.8 * la);
+        ellipse(x1, y1, d.w, d.w);
+
+        // Respawn
+        if (d.y > height + d.len) {
+            let nd = newDrop(li, false);
+            Object.assign(d, nd);
+        }
+        if (d.x < -60) d.x = width + 60;
+        if (d.x > width + 60) d.x = -60;
+    }
+}
+
+// ─── DRAW: GLITCH CHARS ──────────────────────────────────
+
+function drawGlitchChars() {
+    let nColors = params.neonColors.map(hexToRgb);
+    if (random() < params.glitchFreq * 0.06) {
+        let c = nColors[floor(random(nColors.length))];
+        glitchChars.push({
+            x: random(width), y: random(-50, 0),
+            ch: GLITCH_CHARS[floor(random(GLITCH_CHARS.length))],
+            vy: random(3, 12),
+            r: c.r, g: c.g, b: c.b,
+            alpha: random(160, 255),
+            size: random(10, 22),
+            life: 1.0
+        });
+    }
+    for (let i = glitchChars.length - 1; i >= 0; i--) {
+        let gc = glitchChars[i];
+        gc.y += gc.vy;
+        gc.life -= 0.008;
+        textSize(gc.size);
+        textAlign(CENTER, CENTER);
+        noStroke();
+        fill(gc.r, gc.g, gc.b, gc.alpha * gc.life * 0.28 * params.glowIntensity);
+        text(gc.ch, gc.x + 1, gc.y + 1);
+        fill(gc.r, gc.g, gc.b, gc.alpha * gc.life);
+        text(gc.ch, gc.x, gc.y);
+        if (random() < 0.05) gc.ch = GLITCH_CHARS[floor(random(GLITCH_CHARS.length))];
+        if (gc.life <= 0 || gc.y > height + 30) glitchChars.splice(i, 1);
+    }
+}
+
+// ─── DRAW: MIST OVERLAY ──────────────────────────────────
+
+function drawMistOverlay() {
+    let nColors = params.neonColors.map(hexToRgb);
+    noStroke();
+    for (let nc of nColors) {
+        fill(nc.r, nc.g, nc.b, 8 * params.glowIntensity);
+        rect(0, 0, width, height);
+    }
+    // Soft vignette
+    for (let r2 = width * 0.95; r2 > width * 0.3; r2 -= 20) {
+        fill(0, 0, 0, map(r2, width * 0.3, width * 0.95, 0, 5));
+        ellipse(width/2, height/2, r2 * 1.3, r2);
+    }
+}
+
+// ─── MAIN DRAW LOOP ──────────────────────────────────────
+
+function draw() {
+    frameCount2++;
+
+    // Auto-scroll: advance master offset each frame
+    scrollOffset += params.scrollSpeed;
+
+    background(4, 5, 18, 52);
+
+    // Draw order: bg → far buildings → far rain → mid buildings → mid rain → near buildings → near rain → glitch → mist
+    drawBackground();
+    drawLayer(0);
+    drawRainLayer(0);
+    drawLayer(1);
+    drawRainLayer(1);
+    drawLayer(2);
+    drawRainLayer(2);
+    drawGlitchChars();
+    drawMistOverlay();
+}
+
+// ─── UI HANDLERS ─────────────────────────────────────────
+
+function updateParam(name, val) {
+    params[name] = val;
+    document.getElementById(name + '-value').textContent = val;
+    if (name === 'rainCount' || name === 'buildingCount') {
+        initializeSystem();
+    }
+}
+
+function updateNeonColor(idx, hex) {
+    params.neonColors[idx] = hex;
+    document.getElementById('neon' + (idx+1) + '-value').textContent = hex;
+    initializeSystem();
+}
+
+function updateSeedDisplay() {
+    document.getElementById('seed-input').value = params.seed;
+}
+
+function updateSeed() {
+    let v = parseInt(document.getElementById('seed-input').value);
+    if (v && v > 0) { params.seed = v; initializeSystem(); }
+    else updateSeedDisplay();
+}
+
+function previousSeed() {
+    params.seed = Math.max(1, params.seed - 1);
+    updateSeedDisplay(); initializeSystem();
+}
+
+function nextSeed() {
+    params.seed += 1;
+    updateSeedDisplay(); initializeSystem();
+}
+
+function randomSeedAndUpdate() {
+    params.seed = Math.floor(Math.random() * 999999) + 1;
+    updateSeedDisplay(); initializeSystem();
+}
+
+function resetParameters() {
+    params = JSON.parse(JSON.stringify(defaultParams));
+    document.getElementById('scrollSpeed').value = params.scrollSpeed;
+    document.getElementById('scrollSpeed-value').textContent = params.scrollSpeed;
+    document.getElementById('rainCount').value = params.rainCount;
+    document.getElementById('rainCount-value').textContent = params.rainCount;
+    document.getElementById('rainSpeed').value = params.rainSpeed;
+    document.getElementById('rainSpeed-value').textContent = params.rainSpeed;
+    document.getElementById('streakLen').value = params.streakLen;
+    document.getElementById('streakLen-value').textContent = params.streakLen;
+    document.getElementById('windDrift').value = params.windDrift;
+    document.getElementById('windDrift-value').textContent = params.windDrift;
+    document.getElementById('glowIntensity').value = params.glowIntensity;
+    document.getElementById('glowIntensity-value').textContent = params.glowIntensity;
+    document.getElementById('buildingCount').value = params.buildingCount;
+    document.getElementById('buildingCount-value').textContent = params.buildingCount;
+    document.getElementById('glitchFreq').value = params.glitchFreq;
+    document.getElementById('glitchFreq-value').textContent = params.glitchFreq;
+    document.getElementById('neon1').value = params.neonColors[0];
+    document.getElementById('neon1-value').textContent = params.neonColors[0];
+    document.getElementById('neon2').value = params.neonColors[1];
+    document.getElementById('neon2-value').textContent = params.neonColors[1];
+    document.getElementById('neon3').value = params.neonColors[2];
+    document.getElementById('neon3-value').textContent = params.neonColors[2];
+    updateSeedDisplay();
+    initializeSystem();
+}
+
+function downloadPNG() {
+    saveCanvas('neon_deluge_' + params.seed, 'png');
+}
+
+window.addEventListener('load', updateSeedDisplay);
+</script>
+</body>
+</html>

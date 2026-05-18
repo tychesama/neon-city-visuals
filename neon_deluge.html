@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neon Deluge — Generative Art</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&family=Lora:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --anthropic-dark: #141413;
+            --anthropic-light: #faf9f5;
+            --anthropic-mid-gray: #b0aea5;
+            --anthropic-light-gray: #e8e6dc;
+            --anthropic-orange: #d97757;
+            --anthropic-blue: #6a9bcc;
+            --anthropic-green: #788c5d;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: linear-gradient(135deg, var(--anthropic-light) 0%, #f5f3ee 100%);
+            min-height: 100vh;
+            color: var(--anthropic-dark);
+        }
+        .container { display: flex; min-height: 100vh; padding: 20px; gap: 20px; }
+        .sidebar {
+            width: 300px; flex-shrink: 0;
+            background: rgba(255,255,255,0.95);
+            backdrop-filter: blur(10px);
+            padding: 24px; border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(20,20,19,0.1);
+            overflow-y: auto; overflow-x: hidden;
+        }
+        .sidebar h1 { font-family: 'Lora', serif; font-size: 22px; font-weight: 500; color: var(--anthropic-dark); margin-bottom: 6px; }
+        .sidebar .subtitle { color: var(--anthropic-mid-gray); font-size: 12px; margin-bottom: 28px; line-height: 1.5; }
+        .control-section { margin-bottom: 28px; }
+        .control-section h3 { font-size: 14px; font-weight: 600; color: var(--anthropic-dark); margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+        .control-section h3::before { content: '•'; color: var(--anthropic-orange); font-weight: bold; }
+        .seed-input {
+            width: 100%; background: var(--anthropic-light); padding: 10px; border-radius: 8px;
+            font-family: 'Courier New', monospace; font-size: 13px; margin-bottom: 10px;
+            border: 1px solid var(--anthropic-light-gray); text-align: center;
+        }
+        .seed-input:focus { outline: none; border-color: var(--anthropic-orange); background: white; }
+        .seed-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+        .control-group { margin-bottom: 16px; }
+        .control-group label { display: block; font-size: 13px; font-weight: 500; color: var(--anthropic-dark); margin-bottom: 6px; }
+        .slider-container { display: flex; align-items: center; gap: 10px; }
+        .slider-container input[type="range"] { flex: 1; height: 4px; background: var(--anthropic-light-gray); border-radius: 2px; outline: none; -webkit-appearance: none; }
+        .slider-container input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; background: var(--anthropic-orange); border-radius: 50%; cursor: pointer; transition: all 0.2s; }
+        .slider-container input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.15); }
+        .value-display { font-family: 'Courier New', monospace; font-size: 11px; color: var(--anthropic-mid-gray); min-width: 44px; text-align: right; }
+        .color-group { margin-bottom: 12px; }
+        .color-group label { display: block; font-size: 12px; color: var(--anthropic-mid-gray); margin-bottom: 4px; }
+        .color-picker-container { display: flex; align-items: center; gap: 8px; }
+        .color-picker-container input[type="color"] { width: 30px; height: 30px; border: none; border-radius: 6px; cursor: pointer; background: none; padding: 0; }
+        .color-value { font-family: 'Courier New', monospace; font-size: 11px; color: var(--anthropic-mid-gray); }
+        button {
+            width: 100%; padding: 10px 14px; border: none; border-radius: 8px; cursor: pointer;
+            font-family: 'Poppins', sans-serif; font-size: 13px; font-weight: 500; transition: all 0.2s;
+        }
+        .btn-primary { background: var(--anthropic-orange); color: white; }
+        .btn-primary:hover { background: #c86641; transform: translateY(-1px); }
+        .btn-secondary { background: var(--anthropic-light-gray); color: var(--anthropic-dark); }
+        .btn-secondary:hover { background: #d8d6cc; }
+        .button-row { display: flex; flex-direction: column; gap: 8px; }
+        .canvas-area { flex: 1; display: flex; align-items: center; justify-content: center; }
+        #canvas-container canvas { border-radius: 8px; box-shadow: 0 20px 60px rgba(20,20,19,0.25); display: block; }
+        .loading { color: var(--anthropic-mid-gray); font-size: 14px; padding: 40px; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <!-- SIDEBAR -->
+    <div class="sidebar">
+        <h1>Neon Deluge</h1>
+        <p class="subtitle">Cyberpunk rain cascade — data as weather, neon as signal, city as ghost.</p>
+
+        <!-- SEED -->
+        <div class="control-section">
+            <h3>Seed</h3>
+            <input type="text" class="seed-input" id="seed-input" value="42069" onchange="updateSeed()">
+            <div class="seed-controls">
+                <button class="btn-secondary" onclick="previousSeed()">← Prev</button>
+                <button class="btn-secondary" onclick="nextSeed()">Next →</button>
+            </div>
+            <button class="btn-secondary" onclick="randomSeedAndUpdate()">Random Seed</button>
+        </div>
+
+        <!-- PARAMETERS -->
+        <div class="control-section">
+            <h3>Parameters</h3>
+
+            <div class="control-group">
+                <label>Rain Intensity</label>
+                <div class="slider-container">
+                    <input type="range" id="rainCount" min="80" max="400" step="10" value="180" oninput="updateParam('rainCount', parseInt(this.value))">
+                    <span class="value-display" id="rainCount-value">180</span>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label>Fall Speed</label>
+                <div class="slider-container">
+                    <input type="range" id="rainSpeed" min="5" max="30" step="1" value="14" oninput="updateParam('rainSpeed', parseFloat(this.value))">
+                    <span class="value-display" id="rainSpeed-value">14</span>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label>Streak Length</label>
+                <div class="slider-container">
+                    <input type="range" id="streakLen" min="20" max="120" step="5" value="55" oninput="updateParam('streakLen', parseInt(this.value))">
+                    <span class="value-display" id="streakLen-value">55</span>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label>Wind Drift</label>
+                <div class="slider-container">
+                    <input type="range" id="windDrift" min="0" max="3" step="0.1" value="0.8" oninput="updateParam('windDrift', parseFloat(this.value))">
+                    <span class="value-display" id="windDrift-value">0.8</span>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label>Neon Glow</label>
+                <div class="slider-container">
+                    <input type="range" id="glowIntensity" min="0" max="1" step="0.05" value="0.65" oninput="updateParam('glowIntensity', parseFloat(this.value))">
+                    <span class="value-display" id="glowIntensity-value">0.65</span>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label>Building Density</label>
+                <div class="slider-container">
+                    <input type="range" id="buildingCount" min="6" max="22" step="1" value="13" oninput="updateParam('buildingCount', parseInt(this.value))">
+                    <span class="value-display" id="buildingCount-value">13</span>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label>Data Glitch</label>
+                <div class="slider-container">
+                    <input type="range" id="glitchFreq" min="0" max="1" step="0.05" value="0.3" oninput="updateParam('glitchFreq', parseFloat(this.value))">
+                    <span class="value-display" id="glitchFreq-value">0.3</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- COLORS -->
+        <div class="control-section">
+            <h3>Neon Palette</h3>
+            <div class="color-group">
+                <label>Primary Neon</label>
+                <div class="color-picker-container">
+                    <input type="color" id="neon1" value="#00ffff" onchange="updateNeonColor(0, this.value)">
+                    <span class="color-value" id="neon1-value">#00ffff</span>
+                </div>
+            </div>
+            <div class="color-group">
+                <label>Secondary Neon</label>
+                <div class="color-picker-container">
+                    <input type="color" id="neon2" value="#ff2d78" onchange="updateNeonColor(1, this.value)">
+                    <span class="color-value" id="neon2-value">#ff2d78</span>
+                </div>
+            </div>
+            <div class="color-group">
+                <label>Accent Neon</label>
+                <div class="color-picker-container">
+                    <input type="color" id="neon3" value="#ffb700" onchange="updateNeonColor(2, this.value)">
+                    <span class="color-value" id="neon3-value">#ffb700</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- ACTIONS -->
+        <div class="control-section">
+            <h3>Actions</h3>
+            <div class="button-row">
+                <button class="btn-primary" onclick="initializeSystem()">Regenerate</button>
+                <button class="btn-secondary" onclick="resetParameters()">Reset Defaults</button>
+                <button class="btn-secondary" onclick="downloadPNG()">Download PNG</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- CANVAS -->
+    <div class="canvas-area">
+        <div id="canvas-container">
+            <div class="loading">Initializing neon deluge...</div>
+        </div>
+    </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+// NEON DELUGE — Cyberpunk Anime Rain Generator
+// ═══════════════════════════════════════════════════════
+
+let params = {
+    seed: 42069,
+    rainCount: 180,
+    rainSpeed: 14,
+    streakLen: 55,
+    windDrift: 0.8,
+    glowIntensity: 0.65,
+    buildingCount: 13,
+    glitchFreq: 0.3,
+    neonColors: ['#00ffff', '#ff2d78', '#ffb700']
+};
+let defaultParams = JSON.parse(JSON.stringify(params));
+
+// System state
+let drops = [];
+let buildings = [];
+let glitchChars = [];
+let frameCount2 = 0;
+let bgGraphics, cityGraphics;
+
+// Kanji/glitch character set for data rain effect
+const GLITCH_CHARS = ['ア','イ','ウ','エ','オ','カ','キ','ク','ケ','コ','サ','シ','ス','セ','ソ',
+    'タ','チ','ツ','テ','ト','ナ','ニ','ヌ','ネ','ノ','ハ','ヒ','フ','ヘ','ホ',
+    '0','1','2','3','4','5','6','7','8','9','#','$','%','@','!','*','&','^',
+    'マ','ミ','ム','メ','モ','ヤ','ユ','ヨ','ラ','リ','ル','レ','ロ','ワ','ヲ','ン'];
+
+// ─── p5.js SKETCH ────────────────────────────────────────
+
+function hexToRgb(hex) {
+    hex = hex.replace('#', '');
+    return {
+        r: parseInt(hex.substring(0,2), 16),
+        g: parseInt(hex.substring(2,4), 16),
+        b: parseInt(hex.substring(4,6), 16)
+    };
+}
+
+function lerpColor3(c1, c2, t) {
+    return {
+        r: Math.round(c1.r + (c2.r - c1.r) * t),
+        g: Math.round(c1.g + (c2.g - c1.g) * t),
+        b: Math.round(c1.b + (c2.b - c1.b) * t)
+    };
+}
+
+function setup() {
+    let cnv = createCanvas(900, 900);
+    cnv.parent('canvas-container');
+    document.querySelector('.loading').style.display = 'none';
+    initializeSystem();
+}
+
+function initializeSystem() {
+    randomSeed(params.seed);
+    noiseSeed(params.seed);
+    frameCount2 = 0;
+    buildCityscape();
+    spawnDrops();
+    glitchChars = [];
+    background(0);
+    drawBackground();
+}
+
+function buildCityscape() {
+    buildings = [];
+    let usedSeed = params.seed;
+    // Generate buildings with seeded random
+    let totalW = width;
+    let segW = totalW / params.buildingCount;
+
+    for (let i = 0; i < params.buildingCount; i++) {
+        let bx = i * segW + randomGaussian(0, segW * 0.08);
+        bx = constrain(bx, 0, totalW - segW * 0.5);
+        let bw = segW * (0.65 + random(0.3));
+        let bh = random(height * 0.25, height * 0.72);
+        let by = height - bh;
+
+        // Window grid
+        let windowRows = floor(bh / 18);
+        let windowCols = floor(bw / 14);
+        let windows = [];
+        for (let wr = 0; wr < windowRows; wr++) {
+            for (let wc = 0; wc < windowCols; wc++) {
+                windows.push({
+                    lit: random() < 0.4,
+                    flickerPhase: random(TWO_PI),
+                    flickerSpeed: random(0.005, 0.05),
+                    color: floor(random(params.neonColors.length))
+                });
+            }
+        }
+
+        // Neon sign on some buildings
+        let hasSign = random() < 0.45;
+        let signColor = floor(random(params.neonColors.length));
+
+        buildings.push({ x: bx, y: by, w: bw, h: bh, windowRows, windowCols, windows, hasSign, signColor });
+    }
+}
+
+function spawnDrops() {
+    drops = [];
+    for (let i = 0; i < params.rainCount; i++) {
+        drops.push(newDrop(true));
+    }
+}
+
+function newDrop(randomY) {
+    let colorIdx = floor(random(params.neonColors.length));
+    let rgb = hexToRgb(params.neonColors[colorIdx]);
+    let spd = random(params.rainSpeed * 0.5, params.rainSpeed * 1.5);
+    let len = random(params.streakLen * 0.5, params.streakLen * 1.4);
+    return {
+        x: random(width),
+        y: randomY ? random(-height, 0) : random(-200, -10),
+        vx: random(-params.windDrift, params.windDrift),
+        vy: spd,
+        len: len,
+        r: rgb.r, g: rgb.g, b: rgb.b,
+        alpha: random(140, 255),
+        w: random(0.8, 2.2),
+        noiseOff: random(1000)
+    };
+}
+
+function drawBackground() {
+    // Deep dark city sky gradient
+    for (let y = 0; y < height; y++) {
+        let t = y / height;
+        let r = lerp(4, 12, t);
+        let g = lerp(2, 8, t);
+        let b = lerp(18, 28, t);
+        stroke(r, g, b);
+        line(0, y, width, y);
+    }
+
+    // Atmospheric neon bloom halos from implied ground sources
+    noStroke();
+    let nColors = params.neonColors.map(hexToRgb);
+    for (let i = 0; i < nColors.length; i++) {
+        let c = nColors[i];
+        let bx = width * (0.2 + i * 0.3);
+        let by = height * 0.85;
+        for (let r = 180; r > 0; r -= 8) {
+            fill(c.r, c.g, c.b, map(r, 0, 180, 0, 18 * params.glowIntensity));
+            ellipse(bx, by, r * 2.5, r * 0.8);
+        }
+    }
+
+    // Scanline overlay
+    for (let y = 0; y < height; y += 3) {
+        fill(0, 0, 0, 18);
+        noStroke();
+        rect(0, y, width, 1);
+    }
+}
+
+function drawCity() {
+    let t = frameCount2 * 0.01;
+
+    for (let b of buildings) {
+        let nColors = params.neonColors.map(hexToRgb);
+
+        // Building silhouette with slight neon edge glow
+        let sc = nColors[b.signColor % nColors.length];
+        // Glow edge
+        noStroke();
+        fill(sc.r, sc.g, sc.b, 12 * params.glowIntensity);
+        rect(b.x - 3, b.y - 3, b.w + 6, b.h + 6);
+
+        // Dark building body
+        fill(6, 8, 14, 230);
+        noStroke();
+        rect(b.x, b.y, b.w, b.h);
+
+        // Windows
+        let wW = b.w / (b.windowCols + 1);
+        let wH = b.h / (b.windowRows + 1);
+        for (let wr = 0; wr < b.windowRows; wr++) {
+            for (let wc = 0; wc < b.windowCols; wc++) {
+                let wi = wr * b.windowCols + wc;
+                let win = b.windows[wi];
+                if (!win) continue;
+                let wx = b.x + (wc + 0.5) * wW;
+                let wy = b.y + (wr + 0.5) * wH;
+                // Flicker
+                let flicker = noise(win.flickerPhase + t * win.flickerSpeed * 10) > 0.38;
+                if (win.lit && flicker) {
+                    let wc2 = nColors[win.color % nColors.length];
+                    // Window glow
+                    noStroke();
+                    fill(wc2.r, wc2.g, wc2.b, 60 * params.glowIntensity);
+                    rect(wx - 4, wy - 3, 8, 6);
+                    fill(wc2.r, wc2.g, wc2.b, 200);
+                    rect(wx - 2.5, wy - 2, 5, 4);
+                }
+            }
+        }
+
+        // Neon rooftop sign
+        if (b.hasSign) {
+            let sc2 = nColors[b.signColor % nColors.length];
+            let signFlicker = sin(t * 3.7 + b.x * 0.01) > -0.7 + random(-0.05, 0.05);
+            if (signFlicker) {
+                strokeWeight(2.5);
+                stroke(sc2.r, sc2.g, sc2.b, 255);
+                noFill();
+                let sw = b.w * 0.6;
+                let sx = b.x + b.w * 0.2;
+                let sy = b.y - 8;
+                line(sx, sy, sx + sw, sy);
+                // Glow layers
+                for (let gl = 1; gl <= 3; gl++) {
+                    stroke(sc2.r, sc2.g, sc2.b, 60 / gl * params.glowIntensity);
+                    strokeWeight(2.5 + gl * 3);
+                    line(sx, sy, sx + sw, sy);
+                }
+            }
+        }
+    }
+}
+
+function drawRain() {
+    let nColors = params.neonColors.map(hexToRgb);
+
+    for (let d of drops) {
+        // Noise-based lateral drift
+        let noiseVal = noise(d.noiseOff + frameCount2 * 0.003);
+        d.x += d.vx + map(noiseVal, 0, 1, -0.3, 0.3);
+        d.y += d.vy;
+
+        // Draw streak: head bright, tail fades
+        let segments = 10;
+        for (let s = 0; s < segments; s++) {
+            let t2 = s / segments;
+            let alpha = d.alpha * (1 - t2) * (1 - t2);
+            let sx = d.x - d.vx * (segments - s) * 0.3;
+            let sy = d.y - d.len * t2;
+            let sy2 = d.y - d.len * (t2 + 1/segments);
+
+            // Glow pass
+            if (params.glowIntensity > 0.2) {
+                strokeWeight(d.w + 2.5);
+                stroke(d.r, d.g, d.b, alpha * 0.18 * params.glowIntensity);
+                line(sx, sy, sx, sy2);
+            }
+            // Core streak
+            strokeWeight(d.w);
+            stroke(d.r, d.g, d.b, alpha);
+            line(sx, sy, sx, sy2);
+        }
+
+        // Head flare — bright tip
+        noStroke();
+        fill(d.r, d.g, d.b, d.alpha);
+        ellipse(d.x, d.y, d.w * 2, d.w * 2);
+        fill(255, 255, 255, d.alpha * 0.6);
+        ellipse(d.x, d.y, d.w, d.w);
+
+        // Respawn
+        if (d.y > height + d.len) {
+            let nd = newDrop(false);
+            d.x = nd.x; d.y = nd.y; d.vx = nd.vx; d.vy = nd.vy;
+            d.len = nd.len; d.r = nd.r; d.g = nd.g; d.b = nd.b;
+            d.alpha = nd.alpha; d.w = nd.w; d.noiseOff = nd.noiseOff;
+        }
+        if (d.x < -20) d.x = width + 20;
+        if (d.x > width + 20) d.x = -20;
+    }
+}
+
+function drawGlitchChars() {
+    let nColors = params.neonColors.map(hexToRgb);
+
+    // Spawn new glitch chars
+    if (random() < params.glitchFreq * 0.06) {
+        let c = nColors[floor(random(nColors.length))];
+        glitchChars.push({
+            x: random(width),
+            y: random(-50, 0),
+            ch: GLITCH_CHARS[floor(random(GLITCH_CHARS.length))],
+            vy: random(3, 12),
+            r: c.r, g: c.g, b: c.b,
+            alpha: random(160, 255),
+            size: random(10, 22),
+            life: 1.0
+        });
+    }
+
+    // Draw and update
+    for (let i = glitchChars.length - 1; i >= 0; i--) {
+        let gc = glitchChars[i];
+        gc.y += gc.vy;
+        gc.life -= 0.008;
+
+        textSize(gc.size);
+        textAlign(CENTER, CENTER);
+        noStroke();
+        // Glow
+        fill(gc.r, gc.g, gc.b, gc.alpha * gc.life * 0.3 * params.glowIntensity);
+        text(gc.ch, gc.x + 1, gc.y + 1);
+        fill(gc.r, gc.g, gc.b, gc.alpha * gc.life);
+        text(gc.ch, gc.x, gc.y);
+
+        // Randomly mutate char
+        if (random() < 0.05) gc.ch = GLITCH_CHARS[floor(random(GLITCH_CHARS.length))];
+
+        if (gc.life <= 0 || gc.y > height + 30) {
+            glitchChars.splice(i, 1);
+        }
+    }
+}
+
+function drawMistOverlay() {
+    // Atmospheric chromatic mist layers
+    let nColors = params.neonColors.map(hexToRgb);
+    noStroke();
+    for (let nc of nColors) {
+        fill(nc.r, nc.g, nc.b, 4 * params.glowIntensity);
+        rect(0, 0, width, height);
+    }
+    // Dark vignette
+    for (let r2 = width; r2 > 0; r2 -= 20) {
+        fill(0, 0, 0, map(r2, 0, width, 22, 0));
+        ellipse(width/2, height/2, r2, r2 * 0.9);
+    }
+}
+
+function draw() {
+    frameCount2++;
+    background(5, 6, 16, 40); // Persistence/trails
+
+    drawBackground();
+    drawCity();
+    drawRain();
+    drawGlitchChars();
+    drawMistOverlay();
+
+    // Scanlines dynamic
+    noStroke();
+    for (let y = 0; y < height; y += 3) {
+        fill(0, 0, 5, 12);
+        rect(0, y, width, 1);
+    }
+}
+
+// ─── UI HANDLERS ─────────────────────────────────────────
+
+function updateParam(name, val) {
+    params[name] = val;
+    document.getElementById(name + '-value').textContent = val;
+    if (name === 'rainCount' || name === 'buildingCount') {
+        initializeSystem();
+    }
+}
+
+function updateNeonColor(idx, hex) {
+    params.neonColors[idx] = hex;
+    document.getElementById('neon' + (idx+1) + '-value').textContent = hex;
+    initializeSystem();
+}
+
+function updateSeedDisplay() {
+    document.getElementById('seed-input').value = params.seed;
+}
+
+function updateSeed() {
+    let v = parseInt(document.getElementById('seed-input').value);
+    if (v && v > 0) { params.seed = v; initializeSystem(); }
+    else updateSeedDisplay();
+}
+
+function previousSeed() {
+    params.seed = Math.max(1, params.seed - 1);
+    updateSeedDisplay(); initializeSystem();
+}
+
+function nextSeed() {
+    params.seed += 1;
+    updateSeedDisplay(); initializeSystem();
+}
+
+function randomSeedAndUpdate() {
+    params.seed = Math.floor(Math.random() * 999999) + 1;
+    updateSeedDisplay(); initializeSystem();
+}
+
+function resetParameters() {
+    params = JSON.parse(JSON.stringify(defaultParams));
+    document.getElementById('rainCount').value = params.rainCount;
+    document.getElementById('rainCount-value').textContent = params.rainCount;
+    document.getElementById('rainSpeed').value = params.rainSpeed;
+    document.getElementById('rainSpeed-value').textContent = params.rainSpeed;
+    document.getElementById('streakLen').value = params.streakLen;
+    document.getElementById('streakLen-value').textContent = params.streakLen;
+    document.getElementById('windDrift').value = params.windDrift;
+    document.getElementById('windDrift-value').textContent = params.windDrift;
+    document.getElementById('glowIntensity').value = params.glowIntensity;
+    document.getElementById('glowIntensity-value').textContent = params.glowIntensity;
+    document.getElementById('buildingCount').value = params.buildingCount;
+    document.getElementById('buildingCount-value').textContent = params.buildingCount;
+    document.getElementById('glitchFreq').value = params.glitchFreq;
+    document.getElementById('glitchFreq-value').textContent = params.glitchFreq;
+    document.getElementById('neon1').value = params.neonColors[0];
+    document.getElementById('neon1-value').textContent = params.neonColors[0];
+    document.getElementById('neon2').value = params.neonColors[1];
+    document.getElementById('neon2-value').textContent = params.neonColors[1];
+    document.getElementById('neon3').value = params.neonColors[2];
+    document.getElementById('neon3-value').textContent = params.neonColors[2];
+    updateSeedDisplay();
+    initializeSystem();
+}
+
+function downloadPNG() {
+    saveCanvas('neon_deluge_' + params.seed, 'png');
+}
+
+window.addEventListener('load', updateSeedDisplay);
+</script>
+</body>
+</html>
